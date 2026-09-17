@@ -78,27 +78,26 @@ def draw_ellipse(position, covariance, cov_type, ax, **kwargs):
         )
         ax.add_patch(ellipse)
 
-# -----------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # Model Fitting with Initial Points
 # -----------------------------------------------------------------------------
 # 1. K-Means
-# Step A: Capture initial centroids from K-Means++
 km_init = KMeans(n_clusters=k, init='k-means++', n_init=1, max_iter=1, random_state=seed)
 km_init.fit(X)
 km_initial_centroids = km_init.cluster_centers_
 
-# Step B: Full convergence
 km = KMeans(n_clusters=k, init=km_initial_centroids, n_init=1, random_state=seed)
 km_labels = km.fit_predict(X)
 
 # 2. Gaussian Mixture Model (GMM)
-# Step A: Capture initial means (GMM uses K-Means initialization by default)
-gmm_init = GaussianMixture(n_components=k, covariance_type=cov_type, max_iter=1, random_state=seed)
-gmm_init.fit(X)
-gmm_initial_means = gmm_init.means_
+# GMM initializes its means using K-Means internally by default.
+# We extract initial means using KMeans with the same seed to avoid max_iter validation errors.
+gmm_init_km = KMeans(n_clusters=k, init='k-means++', n_init=1, max_iter=1, random_state=seed)
+gmm_init_km.fit(X)
+gmm_initial_means = gmm_init_km.cluster_centers_
 
-# Step B: Full convergence
-gmm = GaussianMixture(n_components=k, covariance_type=cov_type, max_iter=200, random_state=seed)
+# Fit full GMM model
+gmm = GaussianMixture(n_components=k, covariance_type=cov_type, random_state=seed)
 gmm_labels = gmm.fit_predict(X)
 
 # -----------------------------------------------------------------------------
