@@ -18,8 +18,7 @@ st.set_page_config(
 st.title("📊 Model Comparison: K-Means vs Gaussian Mixture Models (GMM)")
 st.markdown("""
 This demo compares **K-Means** (hard boundary clustering) against **GMM** (soft probabilistic clustering) 
-using **Sepal Length** and **Sepal Width** from the Iris dataset. Experiment with different GMM covariance structures 
-to see how cluster shapes adapt to the data!
+using **Sepal Length** and **Sepal Width** from the Iris dataset.
 """)
 
 # -----------------------------------------------------------------------------
@@ -44,27 +43,26 @@ cov_type = st.sidebar.selectbox("GMM Covariance Type:", ["spherical", "diagonal"
 seed = st.sidebar.number_input("Random Seed:", min_value=0, max_value=999, value=42)
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 💡 Model Differences")
-st.sidebar.markdown("- **K-Means**: Circular/spherical hard boundaries.")
-st.sidebar.markdown("- **GMM (Spherical)**: Equal variance across dimensions.")
-st.sidebar.markdown("- **GMM (Diagonal)**: Axis-aligned elliptical boundaries.")
-st.sidebar.markdown("- **GMM (Full)**: Rotated ellipses capturing correlations.")
+st.sidebar.markdown("### 💡 Visual Legend")
+st.sidebar.markdown("⭐ **Yellow Star:** Initial Centroids / Initial Means")
+st.sidebar.markdown("❌ **Red Cross:** Final Centroids / Final Means")
 
 # -----------------------------------------------------------------------------
-# Helper Function to Draw GMM Covariance Ellipses
+# Robust Helper Function to Draw GMM Covariance Ellipses
 # -----------------------------------------------------------------------------
 def draw_ellipse(position, covariance, cov_type, ax, **kwargs):
     if cov_type == "full":
-        # 2D Covariance Matrix
+        # 2D Covariance Matrix (2, 2)
         U, s, Vt = np.linalg.svd(covariance)
         angle = np.degrees(np.arctan2(U[1, 0], U[0, 0]))
         width, height = 2 * np.sqrt(s)
     elif cov_type == "diagonal":
-        # 1D Array with 2 elements
-        width, height = 2 * np.sqrt(covariance)
+        # 1D Array with 2 elements (variance for each feature)
+        width = 2 * np.sqrt(covariance[0])
+        height = 2 * np.sqrt(covariance[1])
         angle = 0
     else:  # spherical
-        # Scalar or 1-element array
+        # Scalar value or 1-element array
         val = np.atleast_1d(covariance)[0]
         width = height = 2 * np.sqrt(val)
         angle = 0
@@ -81,19 +79,34 @@ def draw_ellipse(position, covariance, cov_type, ax, **kwargs):
         ax.add_patch(ellipse)
 
 # -----------------------------------------------------------------------------
-# Model Fitting & Visualization
+# Model Fitting with Initial Points
 # -----------------------------------------------------------------------------
-# 1. Fit K-Means
-km = KMeans(n_clusters=k, init='k-means++', n_init=10, random_state=seed)
+# 1. K-Means
+# Step A: Capture initial centroids from K-Means++
+km_init = KMeans(n_clusters=k, init='k-means++', n_init=1, max_iter=1, random_state=seed)
+km_init.fit(X)
+km_initial_centroids = km_init.cluster_centers_
+
+# Step B: Full convergence
+km = KMeans(n_clusters=k, init=km_initial_centroids, n_init=1, random_state=seed)
 km_labels = km.fit_predict(X)
 
-# 2. Fit GMM
-gmm = GaussianMixture(n_components=k, covariance_type=cov_type, random_state=seed)
+# 2. Gaussian Mixture Model (GMM)
+# Step A: Capture initial means (GMM uses K-Means initialization by default)
+gmm_init = GaussianMixture(n_components=k, covariance_type=cov_type, max_iter=1, random_state=seed)
+gmm_init.fit(X)
+gmm_initial_means = gmm_init.means_
+
+# Step B: Full convergence
+gmm = GaussianMixture(n_components=k, covariance_type=cov_type, max_iter=200, random_state=seed)
 gmm_labels = gmm.fit_predict(X)
 
+# -----------------------------------------------------------------------------
+# Visualizations
+# -----------------------------------------------------------------------------
 col1, col2 = st.columns(2)
 
-# Meshgrid for Voronoi / Decision Contour plotting
+# Grid for decision boundary plots
 h = 0.02
 x_min, x_max = X[:, 0].min() - 0.5, X[:, 0].max() + 0.5
 y_min, y_max = X[:, 1].min() - 0.5, X[:, 1].max() + 0.5
@@ -108,9 +121,18 @@ with col1:
     ax1.contourf(xx, yy, Z_km, alpha=0.2, cmap='Set2')
     
     ax1.scatter(X[:, 0], X[:, 1], c=km_labels, cmap='Set2', edgecolor='k', s=50, alpha=0.8)
+    
+    # Starting Points
+    ax1.scatter(
+        km_initial_centroids[:, 0], km_initial_centroids[:, 1],
+        c='yellow', marker='*', s=250, edgecolor='black', linewidth=1.5,
+        label='Initial Centroids', zorder=10
+    )
+    # Final Centroids
     ax1.scatter(
         km.cluster_centers_[:, 0], km.cluster_centers_[:, 1],
-        c='red', marker='x', s=150, linewidth=3, label='Centroids', zorder=10
+        c='red', marker='x', s=150, linewidth=3,
+        label='Final Centroids', zorder=10
     )
     
     ax1.set_title(f"K-Means (K = {k})", fontweight='bold')
@@ -130,11 +152,20 @@ with col2:
     
     ax2.scatter(X[:, 0], X[:, 1], c=gmm_labels, cmap='Set2', edgecolor='k', s=50, alpha=0.8)
     
-    # Plot component means and ellipses
+    # Starting Means
+    ax2.scatter(
+        gmm_initial_means[:, 0], gmm_initial_means[:, 1],
+        c='yellow', marker='*', s=250, edgecolor='black', linewidth=1.5,
+        label='Initial Means', zorder=10
+    )
+    # Final Means
     ax2.scatter(
         gmm.means_[:, 0], gmm.means_[:, 1],
-        c='red', marker='X', s=150, edgecolor='black', label='Component Means', zorder=10
+        c='red', marker='x', s=150, linewidth=3,
+        label='Final Means', zorder=10
     )
+    
+    # Draw Ellipses
     for i in range(gmm.n_components):
         draw_ellipse(gmm.means_[i], gmm.covariances_[i], cov_type, ax=ax2, alpha=0.25, color='black')
         
