@@ -39,10 +39,9 @@ X, feature_names = load_data()
 st.sidebar.header("⚙️ Settings")
 
 k = st.sidebar.slider("Number of Clusters/Components (K):", min_value=2, max_value=6, value=3)
-
-# Notice "diag" instead of "diagonal" below
-cov_type = st.sidebar.selectbox("GMM Covariance Type:", ["spherical", "diag", "full"])
-seed = int(st.sidebar.number_input("Random Seed:", min_value=0, max_value=999, value=42, step=1))
+cov_type = st.sidebar.selectbox("Covariance Type:", ["spherical", "diag", "full"])
+seed_val = st.sidebar.number_input("Random Seed:", min_value=0, max_value=999, value=42, step=1)
+seed = int(seed_val)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💡 Visual Legend")
@@ -50,7 +49,7 @@ st.sidebar.markdown("⭐ **Yellow Star:** Initial Centroids / Initial Means")
 st.sidebar.markdown("❌ **Red Cross:** Final Centroids / Final Means")
 
 # -----------------------------------------------------------------------------
-# Helper Function to Draw GMM Covariance Ellipses
+# Helper Function to Draw Covariance Ellipses
 # -----------------------------------------------------------------------------
 def draw_ellipse(position, covariance, cov_type, ax, **kwargs):
     if cov_type == "full":
@@ -80,6 +79,32 @@ def draw_ellipse(position, covariance, cov_type, ax, **kwargs):
         )
         ax.add_patch(ellipse)
 
+# Helper to estimate empirical cluster covariances for K-Means based on type
+def get_kmeans_covariances(X, labels, k, cov_type):
+    covs = []
+    for i in range(k):
+        cluster_pts = X[labels == i]
+        if len(cluster_pts) <= 1:
+            # Fallback for single point or empty cluster
+            if cov_type == "full":
+                covs.append(np.eye(2) * 1e-3)
+            elif cov_type == "diag":
+                covs.append(np.ones(2) * 1e-3)
+            else:
+                covs.append(1e-3)
+            continue
+            
+        full_cov = np.cov(cluster_pts, rowvar=False)
+        
+        if cov_type == "full":
+            covs.append(full_cov)
+        elif cov_type == "diag":
+            covs.append(np.diag(full_cov))
+        elif cov_type == "spherical":
+            covs.append(np.mean(np.diag(full_cov)))
+            
+    return covs
+
 # -----------------------------------------------------------------------------
 # Model Fitting
 # -----------------------------------------------------------------------------
@@ -90,6 +115,9 @@ km_initial_centroids = km_init.cluster_centers_
 
 km = KMeans(n_clusters=k, init=km_initial_centroids, n_init=1, random_state=seed)
 km_labels = km.fit_predict(X)
+
+# Calculate empirical covariances for K-Means clusters
+km_covariances = get_kmeans_covariances(X, km_labels, k, cov_type)
 
 # 2. Gaussian Mixture Model (GMM)
 gmm_initial_means = km_initial_centroids
@@ -136,6 +164,10 @@ with col1:
         label='Final Centroids', zorder=10
     )
     
+    # Draw K-Means Empirical Covariance Ellipses
+    for i in range(k):
+        draw_ellipse(km.cluster_centers_[i], km_covariances[i], cov_type, ax=ax1, alpha=0.25, color='black')
+    
     ax1.set_title(f"K-Means (K = {k})", fontweight='bold')
     ax1.set_xlabel(feature_names[0])
     ax1.set_ylabel(feature_names[1])
@@ -166,7 +198,7 @@ with col2:
         label='Final Means', zorder=10
     )
     
-    # Draw Ellipses
+    # Draw GMM Covariance Ellipses
     for i in range(gmm.n_components):
         draw_ellipse(gmm.means_[i], gmm.covariances_[i], cov_type, ax=ax2, alpha=0.25, color='black')
         
@@ -177,14 +209,3 @@ with col2:
     
     st.pyplot(fig2)
     st.metric("Log-Likelihood", f"{gmm.score(X) * len(X):.2f}")
-
-# -----------------------------------------------------------------------------
-# Model Selection Criteria
-# -----------------------------------------------------------------------------
-st.markdown("---")
-st.subheader("📋 GMM Model Quality Indicators")
-col_m1, col_m2, col_m3 = st.columns(3)
-
-col_m1.metric("AIC (Akaike Information Criterion)", f"{gmm.aic(X):.2f}")
-col_m2.metric("BIC (Bayesian Information Criterion)", f"{gmm.bic(X):.2f}")
-col_m3.metric("Convergence Status", "Converged" if gmm.converged_ else "Failed")
