@@ -39,11 +39,10 @@ X, feature_names = load_data()
 st.sidebar.header("⚙️ Settings")
 
 k = st.sidebar.slider("Number of Clusters/Components (K):", min_value=2, max_value=6, value=3)
-cov_type = st.sidebar.selectbox("GMM Covariance Type:", ["spherical", "diagonal", "full"])
 
-# Ensure seed is strictly a Python int
-seed_val = st.sidebar.number_input("Random Seed:", min_value=0, max_value=999, value=42, step=1)
-seed = int(seed_val)
+# Notice "diag" instead of "diagonal" below
+cov_type = st.sidebar.selectbox("GMM Covariance Type:", ["spherical", "diag", "full"])
+seed = int(st.sidebar.number_input("Random Seed:", min_value=0, max_value=999, value=42, step=1))
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💡 Visual Legend")
@@ -59,7 +58,7 @@ def draw_ellipse(position, covariance, cov_type, ax, **kwargs):
         U, s, Vt = np.linalg.svd(covariance)
         angle = np.degrees(np.arctan2(U[1, 0], U[0, 0]))
         width, height = 2 * np.sqrt(s)
-    elif cov_type == "diagonal":
+    elif cov_type == "diag":
         # 1D Array with 2 elements [var_x, var_y]
         width = 2 * np.sqrt(covariance[0])
         height = 2 * np.sqrt(covariance[1])
@@ -93,10 +92,8 @@ km = KMeans(n_clusters=k, init=km_initial_centroids, n_init=1, random_state=seed
 km_labels = km.fit_predict(X)
 
 # 2. Gaussian Mixture Model (GMM)
-# Extract starting means using standard KMeans initialization
 gmm_initial_means = km_initial_centroids
 
-# Instantiate GMM cleanly with validated string and int types
 gmm = GaussianMixture(
     n_components=int(k),
     covariance_type=str(cov_type),
