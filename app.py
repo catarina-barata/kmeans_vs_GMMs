@@ -40,7 +40,10 @@ st.sidebar.header("⚙️ Settings")
 
 k = st.sidebar.slider("Number of Clusters/Components (K):", min_value=2, max_value=6, value=3)
 cov_type = st.sidebar.selectbox("GMM Covariance Type:", ["spherical", "diagonal", "full"])
-seed = int(st.sidebar.number_input("Random Seed:", min_value=0, max_value=999, value=42))
+
+# Ensure seed is strictly a Python int
+seed_val = st.sidebar.number_input("Random Seed:", min_value=0, max_value=999, value=42, step=1)
+seed = int(seed_val)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💡 Visual Legend")
@@ -82,22 +85,20 @@ def draw_ellipse(position, covariance, cov_type, ax, **kwargs):
 # Model Fitting
 # -----------------------------------------------------------------------------
 # 1. K-Means
-# Extract initial centroids
 km_init = KMeans(n_clusters=k, init='k-means++', n_init=1, max_iter=1, random_state=seed)
 km_init.fit(X)
 km_initial_centroids = km_init.cluster_centers_
 
-# Full K-Means convergence
 km = KMeans(n_clusters=k, init=km_initial_centroids, n_init=1, random_state=seed)
 km_labels = km.fit_predict(X)
 
 # 2. Gaussian Mixture Model (GMM)
-# Extract starting means (GMM defaults to KMeans initialization)
+# Extract starting means using standard KMeans initialization
 gmm_initial_means = km_initial_centroids
 
-# Full GMM fit (ensuring clean integer seed and valid parameters)
+# Instantiate GMM cleanly with validated string and int types
 gmm = GaussianMixture(
-    n_components=k,
+    n_components=int(k),
     covariance_type=str(cov_type),
     random_state=seed
 )
