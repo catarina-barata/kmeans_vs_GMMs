@@ -40,7 +40,7 @@ st.sidebar.header("⚙️ Settings")
 
 k = st.sidebar.slider("Number of Clusters/Components (K):", min_value=2, max_value=6, value=3)
 cov_type = st.sidebar.selectbox("GMM Covariance Type:", ["spherical", "diagonal", "full"])
-seed = st.sidebar.number_input("Random Seed:", min_value=0, max_value=999, value=42)
+seed = int(st.sidebar.number_input("Random Seed:", min_value=0, max_value=999, value=42))
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💡 Visual Legend")
@@ -48,7 +48,7 @@ st.sidebar.markdown("⭐ **Yellow Star:** Initial Centroids / Initial Means")
 st.sidebar.markdown("❌ **Red Cross:** Final Centroids / Final Means")
 
 # -----------------------------------------------------------------------------
-# Robust Helper Function to Draw GMM Covariance Ellipses
+# Helper Function to Draw GMM Covariance Ellipses
 # -----------------------------------------------------------------------------
 def draw_ellipse(position, covariance, cov_type, ax, **kwargs):
     if cov_type == "full":
@@ -57,7 +57,7 @@ def draw_ellipse(position, covariance, cov_type, ax, **kwargs):
         angle = np.degrees(np.arctan2(U[1, 0], U[0, 0]))
         width, height = 2 * np.sqrt(s)
     elif cov_type == "diagonal":
-        # 1D Array with 2 elements (variance for each feature)
+        # 1D Array with 2 elements [var_x, var_y]
         width = 2 * np.sqrt(covariance[0])
         height = 2 * np.sqrt(covariance[1])
         angle = 0
@@ -78,27 +78,31 @@ def draw_ellipse(position, covariance, cov_type, ax, **kwargs):
         )
         ax.add_patch(ellipse)
 
-## -----------------------------------------------------------------------------
-# Model Fitting with Initial Points
+# -----------------------------------------------------------------------------
+# Model Fitting
 # -----------------------------------------------------------------------------
 # 1. K-Means
+# Extract initial centroids
 km_init = KMeans(n_clusters=k, init='k-means++', n_init=1, max_iter=1, random_state=seed)
 km_init.fit(X)
 km_initial_centroids = km_init.cluster_centers_
 
+# Full K-Means convergence
 km = KMeans(n_clusters=k, init=km_initial_centroids, n_init=1, random_state=seed)
 km_labels = km.fit_predict(X)
 
 # 2. Gaussian Mixture Model (GMM)
-# GMM initializes its means using K-Means internally by default.
-# We extract initial means using KMeans with the same seed to avoid max_iter validation errors.
-gmm_init_km = KMeans(n_clusters=k, init='k-means++', n_init=1, max_iter=1, random_state=seed)
-gmm_init_km.fit(X)
-gmm_initial_means = gmm_init_km.cluster_centers_
+# Extract starting means (GMM defaults to KMeans initialization)
+gmm_initial_means = km_initial_centroids
 
-# Fit full GMM model
-gmm = GaussianMixture(n_components=k, covariance_type=cov_type, random_state=seed)
-gmm_labels = gmm.fit_predict(X)
+# Full GMM fit (ensuring clean integer seed and valid parameters)
+gmm = GaussianMixture(
+    n_components=k,
+    covariance_type=str(cov_type),
+    random_state=seed
+)
+gmm.fit(X)
+gmm_labels = gmm.predict(X)
 
 # -----------------------------------------------------------------------------
 # Visualizations
